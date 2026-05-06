@@ -1,12 +1,11 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "qdialog.h"
 #include <QMainWindow>
 #include <QKeyEvent>
 #include <QPaintEvent>
 #include <QTimerEvent>
-#include <QPainter>
+#include <QPushButton>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -31,11 +30,19 @@ enum SpecialType
     SpecialClearColumn = 3
 };
 
+enum GameState
+{
+    StateMenu = 0,
+    StatePlaying = 1,
+    StatePaused = 2,
+    StateGameOver = 3
+};
+
 struct Cell
 {
     bool filled;
-    int color;      // 0~6，普通颜色索引
-    int special;    // SpecialNone / SpecialBomb / SpecialRainbow / SpecialClearColumn
+    int color;
+    int special;
 };
 
 class MainWindow : public QMainWindow
@@ -43,7 +50,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
 protected:
@@ -52,20 +59,9 @@ protected:
     void timerEvent(QTimerEvent *event) override;
 
 private:
-    bool gameStarted;
-    bool gamePaused;
-
-    QPushButton *startButton;
-    QPushButton *pauseButton;
-    QPushButton *continueButton;
-
-    void startGame();
-    void pauseGame();
-    void continueGame();
     Ui::MainWindow *ui;
 
     Cell board[BOARD_HEIGHT][BOARD_WIDTH];
-
     Cell currentPiece[4][4];
     int currentX;
     int currentY;
@@ -73,6 +69,11 @@ private:
     int timerId;
     int score;
     ThemeType currentTheme;
+    GameState gameState;
+
+    QPushButton *startButton;
+    QPushButton *pauseButton;
+    QPushButton *continueButton;
 
     void initGame();
     void generatePiece();
@@ -94,6 +95,11 @@ private:
 
     void drawBlock(QPainter &p, int x, int y, const Cell &cell);
     void drawCoordinateLabels(QPainter &p, int boardLeft, int boardTop) const;
+
+    void startGame();
+    void pauseGame();
+    void continueGame();
+    void updateButtonState();
 };
 
 #endif // MAINWINDOW_H

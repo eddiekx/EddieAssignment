@@ -1,14 +1,12 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QPushButton>
-#include <QRect>
-#include <QMessageBox>
+#include <QPainter>
 #include <QRandomGenerator>
 #include <QLinearGradient>
 #include <QFont>
+#include <QRect>
 #include <QPen>
-#include <QBrush>
 
 static const int SHAPES[7][4][4] = {
     {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}}, // I
@@ -26,33 +24,30 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    setFixedSize(620, 780);
     setFocusPolicy(Qt::StrongFocus);
+    setWindowTitle("俄罗斯方块 - 升级版");
+    setFixedSize(820, 900);
 
-    gameStarted = false;
-    gamePaused = false;
+    timerId = 0;
+    score = 0;
+    currentTheme = ThemeClassic;
+    gameState = StateMenu;
 
     startButton = new QPushButton("开始游戏", this);
     pauseButton = new QPushButton("暂停游戏", this);
     continueButton = new QPushButton("继续游戏", this);
 
-    startButton->setGeometry(390, 635, 110, 32);
-    pauseButton->setGeometry(390, 675, 110, 32);
-    continueButton->setGeometry(390, 715, 110, 32);
+    startButton->setGeometry(600, 760, 160, 40);
+    pauseButton->setGeometry(600, 815, 160, 40);
+    continueButton->setGeometry(600, 815, 160, 40);
 
     connect(startButton, &QPushButton::clicked, this, &MainWindow::startGame);
     connect(pauseButton, &QPushButton::clicked, this, &MainWindow::pauseGame);
     connect(continueButton, &QPushButton::clicked, this, &MainWindow::continueGame);
 
-    setFocusPolicy(Qt::StrongFocus);
-    setWindowTitle("俄罗斯方块 - 升级版");
-    setFixedSize(520, 720);
-
-    timerId = 0;
-    score = 0;
-    currentTheme = ThemeClassic;
-
     initGame();
+    updateButtonState();
+    update();
 }
 
 MainWindow::~MainWindow()
@@ -62,32 +57,7 @@ MainWindow::~MainWindow()
     }
     delete ui;
 }
-void MainWindow::startGame()
-{
-    gameStarted = true;
-    gamePaused = false;
-    initGame();
-    update();
-}
 
-void MainWindow::pauseGame()
-{
-    if (gameStarted && !gamePaused && timerId != 0) {
-        killTimer(timerId);
-        timerId = 0;
-        gamePaused = true;
-        update();
-    }
-}
-
-void MainWindow::continueGame()
-{
-    if (gameStarted && gamePaused) {
-        timerId = startTimer(500);
-        gamePaused = false;
-        update();
-    }
-}
 void MainWindow::initGame()
 {
     for (int i = 0; i < BOARD_HEIGHT; ++i) {
@@ -96,15 +66,79 @@ void MainWindow::initGame()
         }
     }
 
-    score = 0;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            currentPiece[i][j] = {false, 0, SpecialNone};
+        }
+    }
 
+    currentX = 0;
+    currentY = 0;
+    score = 0;
+}
+
+void MainWindow::startGame()
+{
     if (timerId != 0) {
         killTimer(timerId);
         timerId = 0;
     }
 
-    timerId = startTimer(500);
+    initGame();
+    gameState = StatePlaying;
     generatePiece();
+
+    if (gameState == StatePlaying) {
+        timerId = startTimer(500);
+    }
+
+    updateButtonState();
+    setFocus();
+    update();
+}
+
+void MainWindow::pauseGame()
+{
+    if (gameState == StatePlaying && timerId != 0) {
+        killTimer(timerId);
+        timerId = 0;
+        gameState = StatePaused;
+        updateButtonState();
+        setFocus();
+        update();
+    }
+}
+
+void MainWindow::continueGame()
+{
+    if (gameState == StatePaused) {
+        timerId = startTimer(500);
+        gameState = StatePlaying;
+        updateButtonState();
+        setFocus();
+        update();
+    }
+}
+
+void MainWindow::updateButtonState()
+{
+    if (gameState == StateMenu || gameState == StateGameOver) {
+        startButton->show();
+        pauseButton->hide();
+        continueButton->hide();
+    } else if (gameState == StatePlaying) {
+        startButton->hide();
+        pauseButton->show();
+        continueButton->hide();
+    } else if (gameState == StatePaused) {
+        startButton->hide();
+        pauseButton->hide();
+        continueButton->show();
+    }
+
+    startButton->raise();
+    pauseButton->raise();
+    continueButton->raise();
 }
 
 void MainWindow::generatePiece()
@@ -121,9 +155,9 @@ void MainWindow::generatePiece()
         }
     }
 
-    // 随机给一个方块加特殊效果
     int specialRoll = QRandomGenerator::global()->bounded(100);
     int specialType = SpecialNone;
+
     if (specialRoll < 10) {
         specialType = SpecialBomb;
     } else if (specialRoll < 20) {
@@ -158,8 +192,9 @@ void MainWindow::generatePiece()
             killTimer(timerId);
             timerId = 0;
         }
-        QMessageBox::information(this, "Game Over", "游戏结束！\n得分：" + QString::number(score));
-        initGame();
+        gameState = StateGameOver;
+        updateButtonState();
+        update();
     }
 }
 
@@ -212,12 +247,15 @@ void MainWindow::applySpecialOnLock()
 {
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
-            if (currentPiece[i][j].filled && currentPiece[i][j].special == SpecialBomb) {
+            if (currentPiece[i][j].filled) {
                 int bx = currentX + j;
                 int by = currentY + i;
 
-                // 炸弹方块落地后，直接清除以它为中心的 3x3 范围
-                clearArea(bx, by, 1);
+                if (currentPiece[i][j].special == SpecialBomb) {
+                    clearArea(bx, by, 1);
+                } else if (currentPiece[i][j].special == SpecialClearColumn) {
+                    clearColumn(bx);
+                }
             }
         }
     }
@@ -256,9 +294,6 @@ void MainWindow::clearLines()
             }
         }
 
-        // 规则：
-        // 1. 普通满行：10格全满
-        // 2. 万能满行：只差1格，但这一行里有彩虹方块，彩虹可当作补位
         bool canClear = false;
         if (filledCount == BOARD_WIDTH) {
             canClear = true;
@@ -267,14 +302,12 @@ void MainWindow::clearLines()
         }
 
         if (canClear) {
-            // 如果这一行里有炸弹方块，先炸掉周围 3x3
             for (int j = 0; j < BOARD_WIDTH; ++j) {
                 if (board[i][j].filled && board[i][j].special == SpecialBomb) {
                     clearArea(j, i, 1);
                 }
             }
 
-            // 删除这一行，上面的行整体下移
             for (int k = i; k > 0; --k) {
                 for (int j = 0; j < BOARD_WIDTH; ++j) {
                     board[k][j] = board[k - 1][j];
@@ -286,19 +319,14 @@ void MainWindow::clearLines()
             }
 
             score += 100;
-            i++; // 重新检查当前行
+            i++;
         }
     }
 }
 
 void MainWindow::rotatePiece()
 {
-    Cell temp[4][4];
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            temp[i][j] = {false, 0, SpecialNone};
-        }
-    }
+    Cell temp[4][4] = {};
 
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
@@ -318,15 +346,36 @@ void MainWindow::rotatePiece()
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_P) {
-        if (gamePaused) {
+        if (gameState == StatePaused) {
             continueGame();
-        } else {
+        } else if (gameState == StatePlaying) {
             pauseGame();
         }
         return;
     }
 
-    if (gamePaused) {
+    if (event->key() == Qt::Key_R) {
+        startGame();
+        return;
+    }
+
+    if (event->key() == Qt::Key_1) {
+        currentTheme = ThemeClassic;
+        update();
+        return;
+    }
+    if (event->key() == Qt::Key_2) {
+        currentTheme = ThemeNeon;
+        update();
+        return;
+    }
+    if (event->key() == Qt::Key_3) {
+        currentTheme = ThemePixel;
+        update();
+        return;
+    }
+
+    if (gameState != StatePlaying) {
         return;
     }
 
@@ -348,24 +397,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     else if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Space) {
         rotatePiece();
     }
-    else if (event->key() == Qt::Key_1) {
-        currentTheme = ThemeClassic;
-    }
-    else if (event->key() == Qt::Key_2) {
-        currentTheme = ThemeNeon;
-    }
-    else if (event->key() == Qt::Key_3) {
-        currentTheme = ThemePixel;
-    }
-    else if (event->key() == Qt::Key_R) {
-        initGame();
-    }
 
     update();
 }
 
 void MainWindow::timerEvent(QTimerEvent *event)
 {
+    if (gameState != StatePlaying) {
+        return;
+    }
+
     if (event->timerId() == timerId) {
         if (!checkCollision(currentX, currentY + 1, currentPiece)) {
             currentY++;
@@ -538,7 +579,6 @@ void MainWindow::drawBlock(QPainter &p, int x, int y, const Cell &cell)
         }
     }
 
-    // 特殊块高亮标记
     if (cell.special != SpecialNone) {
         if (currentTheme == ThemeNeon) {
             p.setPen(QPen(QColor(255, 255, 255), 3));
@@ -616,9 +656,7 @@ void MainWindow::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, currentTheme != ThemePixel);
 
-    // 背景
     if (currentTheme == ThemeNeon) {
-        p.fillRect(rect(), getBackgroundColor());
         QLinearGradient bg(0, 0, width(), height());
         bg.setColorAt(0.0, QColor(20, 20, 26));
         bg.setColorAt(1.0, QColor(0, 0, 0));
@@ -637,7 +675,6 @@ void MainWindow::paintEvent(QPaintEvent *)
     const int boardWidthPx = BOARD_WIDTH * BLOCK_SIZE;
     const int boardHeightPx = BOARD_HEIGHT * BLOCK_SIZE;
 
-    // 板区底板
     if (currentTheme == ThemeNeon) {
         p.setPen(QPen(QColor(0, 255, 255, 160), 2));
         p.setBrush(QColor(0, 0, 0, 80));
@@ -648,7 +685,6 @@ void MainWindow::paintEvent(QPaintEvent *)
         p.drawRect(boardLeft - 1, boardTop - 1, boardWidthPx + 1, boardHeightPx + 1);
     }
 
-    // 网格线
     p.setPen(QPen(getGridColor(), 1));
     for (int col = 0; col <= BOARD_WIDTH; ++col) {
         int x = boardLeft + col * BLOCK_SIZE;
@@ -659,10 +695,8 @@ void MainWindow::paintEvent(QPaintEvent *)
         p.drawLine(boardLeft, y, boardLeft + boardWidthPx, y);
     }
 
-    // 行列标号
     drawCoordinateLabels(p, boardLeft, boardTop);
 
-    // 已固定方块
     for (int i = 0; i < BOARD_HEIGHT; ++i) {
         for (int j = 0; j < BOARD_WIDTH; ++j) {
             if (board[i][j].filled) {
@@ -673,23 +707,23 @@ void MainWindow::paintEvent(QPaintEvent *)
         }
     }
 
-    // 当前下落方块
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            if (currentPiece[i][j].filled) {
-                int x = boardLeft + (currentX + j) * BLOCK_SIZE;
-                int y = boardTop + (currentY + i) * BLOCK_SIZE;
-                drawBlock(p, x, y, currentPiece[i][j]);
+    if (gameState == StatePlaying || gameState == StatePaused) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                if (currentPiece[i][j].filled) {
+                    int x = boardLeft + (currentX + j) * BLOCK_SIZE;
+                    int y = boardTop + (currentY + i) * BLOCK_SIZE;
+                    drawBlock(p, x, y, currentPiece[i][j]);
+                }
             }
         }
     }
 
-    // 右侧说明
     int infoX = 390;
-    p.setPen(getTextColor());
 
+    p.setPen(getTextColor());
     QFont titleFont = p.font();
-    titleFont.setPointSize(14);
+    titleFont.setPointSize(16);
     titleFont.setBold(true);
     p.setFont(titleFont);
     p.drawText(infoX, 80, "俄罗斯方块");
@@ -698,32 +732,84 @@ void MainWindow::paintEvent(QPaintEvent *)
     normalFont.setPointSize(10);
     normalFont.setBold(false);
     p.setFont(normalFont);
+    p.drawText(infoX, 125, "得分: " + QString::number(score));
+    p.drawText(infoX, 155, "当前主题: " + getThemeName());
+    p.drawText(infoX, 185, "当前状态: " +
+                               QString(
+                                   gameState == StateMenu ? "菜单界面" :
+                                       gameState == StatePlaying ? "游戏中" :
+                                       gameState == StatePaused ? "暂停中" :
+                                       "游戏结束"));
 
-    p.drawText(infoX, 120, "得分: " + QString::number(score));
-    p.drawText(infoX, 150, "当前主题: " + getThemeName());
+    QFont sectionFont = p.font();
+    sectionFont.setPointSize(10);
+    sectionFont.setBold(true);
+    p.setFont(sectionFont);
+    p.drawText(infoX, 235, "操作说明：");
 
-    p.drawText(infoX, 200, "操作说明:");
-    p.drawText(infoX, 225, "← → 移动");
-    p.drawText(infoX, 250, "↓ 加速下落");
-    p.drawText(infoX, 275, "↑ / 空格 旋转");
-    p.drawText(infoX, 300, "1 经典主题");
-    p.drawText(infoX, 325, "2 霓虹主题");
-    p.drawText(infoX, 350, "3 像素主题");
-    p.drawText(infoX, 375, "R 重新开始");
-    p.drawText(infoX, 390, "按钮：开始 / 暂停 / 继续");
+    QFont smallFont = p.font();
+    smallFont.setPointSize(9);
+    smallFont.setBold(false);
+    p.setFont(smallFont);
 
-    QFont ruleFont = p.font();
-    ruleFont.setPointSize(9);
-    p.setFont(ruleFont);
+    QRect controlRect(infoX, 255, 320, 140);
+    p.drawText(controlRect, Qt::TextWordWrap,
+               "← → 移动方块\n"
+               "↓ 加速下落\n"
+               "↑ / 空格 旋转方块\n"
+               "1 经典主题\n"
+               "2 霓虹主题\n"
+               "3 像素主题\n"
+               "P 暂停 / 继续\n"
+               "R 重新开始");
 
-    QRect ruleRect(infoX, 415, 170, 210);
+    p.setFont(sectionFont);
+    p.drawText(infoX, 420, "特殊方块说明：");
+
+    p.setFont(smallFont);
+    QRect ruleRect(infoX, 440, 320, 250);
     p.drawText(ruleRect, Qt::TextWordWrap,
-               "特殊方块说明：\n"
-               "B 炸弹方块：落地后立刻爆炸，清除周围 3x3 范围。\n"
-               "R 彩虹方块：万能补位，能帮助差 1 格的行也消除。\n"
+               "B 炸弹方块：落地后立刻爆炸，清除周围 3x3 范围。\n\n"
+               "R 彩虹方块：万能补位方块，能帮助差 1 格的行也消除。\n\n"
                "C 清除方块：落地后立即清除当前所在整列。\n\n"
-               "提示：按 1/2/3 切换主题，按 R 重新开始。");
+               "提示：彩虹块是“补位工具”，不是自动清除块。");
 
-    p.drawText(infoX, 590, "网格已显示行号/列号");
+    QRect overlayRect(boardLeft + 25, boardTop + 200, boardWidthPx - 50, 125);
+
+    if (gameState == StateMenu || gameState == StatePaused || gameState == StateGameOver) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 120));
+
+        QFont overlayFont = p.font();
+        overlayFont.setPointSize(15);
+        overlayFont.setBold(true);
+        p.setFont(overlayFont);
+        p.setPen(Qt::white);
+
+        if (gameState == StateMenu) {
+            QRect overlayRect(boardLeft + 70, boardTop + 180, 300, 140);
+
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(0, 0, 0, 140));
+            p.drawRoundedRect(overlayRect, 18, 18);
+
+            QFont overlayFont = p.font();
+            overlayFont.setPointSize(16);
+            overlayFont.setBold(true);
+            p.setFont(overlayFont);
+            p.setPen(Qt::white);
+
+            p.drawText(overlayRect.adjusted(0, 20, 0, 0), Qt::AlignHCenter, "欢迎来到俄罗斯方块");
+            p.drawText(overlayRect.adjusted(0, 60, 0, 0), Qt::AlignHCenter, "点击右下角“开始游戏”进入");
+            p.drawText(overlayRect.adjusted(0, 98, 0, 0), Qt::AlignHCenter, "主题 / 特殊方块 / 网格辅助");
+        }
+        else if (gameState == StatePaused) {
+            p.drawText(overlayRect.adjusted(0, 28, 0, 0), Qt::AlignHCenter, "游戏已暂停");
+            p.drawText(overlayRect.adjusted(0, 66, 0, 0), Qt::AlignHCenter, "点击“继续游戏”恢复");
+        }
+        else {
+            p.drawText(overlayRect.adjusted(0, 28, 0, 0), Qt::AlignHCenter, "游戏结束");
+            p.drawText(overlayRect.adjusted(0, 66, 0, 0), Qt::AlignHCenter, "点击“开始游戏”重新开始");
+        }
+    }
 }
-
