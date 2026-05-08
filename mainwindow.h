@@ -6,10 +6,8 @@
 #include <QPushButton>
 #include <QKeyEvent>
 #include <QPaintEvent>
+#include <QPixmap>
 #include <QColor>
-#include <QVector>
-#include <QPair>
-#include <QPoint>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -17,12 +15,12 @@ QT_END_NAMESPACE
 
 const int BOARD_WIDTH = 10;
 const int BOARD_HEIGHT = 20;
-const int BLOCK_SIZE = 30;
+const int BLOCK_SIZE = 36;
 
 enum ThemeType
 {
     ThemeClassic = 0,
-    ThemeNeon = 1,
+    ThemeCool = 1,
     ThemePixel = 2
 };
 
@@ -109,11 +107,17 @@ private:
 
     QTimer *gameTimer;
 
+    QPixmap menuBg;
+    QPixmap gameBgWarm;   // 暖色底图：经典/像素
+    QPixmap gameBgCool;   // 冷色底图：霓虹
+    QPixmap introImg;
+
     QPushButton *startButton;
     QPushButton *pauseButton;
     QPushButton *continueButton;
     QPushButton *holdButton;
     QPushButton *restartButton;
+    QPushButton *quitButton;
 
     QPushButton *classicModeButton;
     QPushButton *timedModeButton;
@@ -129,18 +133,20 @@ private:
     bool achTimedHalf;
 
 private:
-    void selectMode(GameMode mode);
-
-    void startGame(GameMode mode);
-    void pauseGame();
-    void continueGame();
-    void holdCurrentPiece();
-    void restartCurrentMode();
     void updateButtonState();
     void refreshModeButtonTexts();
 
+    void selectMode(GameMode mode);
+    void startGame(GameMode mode);
+    void pauseGame();
+    void continueGame();
+    void restartCurrentMode();
+    void finishGame(const QString &message);
+    void showAchievement(const QString &message);
+
     void resetBoard();
     void setupObstacleField();
+
     void generateRandomPiece(Cell piece[4][4]);
     void spawnNextPiece();
 
@@ -150,28 +156,26 @@ private:
     void mergePiece();
     void applySpecialOnLock();
     int clearLines();
-
     void rotatePiece();
-    void finishGame(const QString &message);
-    void showAchievement(const QString &message);
+    void holdCurrentPiece();
 
-    int currentDropIntervalMs() const;
-    int scoreForLines(int lines) const;
     int specialSpawnChance() const;
     int challengeTargetLines() const;
+    int currentDropIntervalMs() const;
+    int scoreForLines(int lines) const;
 
     QString themeName() const;
-    QString modeName(GameMode mode) const;
-    QString modeDescription(GameMode mode) const;
     QString stateName() const;
+    QString modeName(GameMode mode) const;
     QString currentModeName() const;
-    QString currentModeDescription() const;
 
     QColor getThemeBlockColor(int colorIndex) const;
     QColor getRainbowColor(int step) const;
     QColor getGridColor() const;
     QColor getBackgroundColor() const;
     QColor getTextColor() const;
+
+    QPixmap currentGameBackground() const;
 
     void drawBlock(QPainter &p, int x, int y, const Cell &cell);
     void drawMiniPiece(QPainter &p, const Cell piece[4][4], int left, int top, int cellSize, const QString &label);

@@ -6,11 +6,11 @@
 #include <QFont>
 #include <QRect>
 #include <QPen>
-#include <QVector>
-#include <QPair>
-#include <QPoint>
 #include <QRandomGenerator>
-#include <QPushButton>
+#include <QVector>
+#include <QPoint>
+#include <QStringList>
+#include <QtGlobal>
 
 static const int SHAPES[7][4][4] = {
     {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}}, // I
@@ -30,7 +30,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     setFocusPolicy(Qt::StrongFocus);
     setWindowTitle("俄罗斯方块 - 升级版");
-    setFixedSize(1240, 920);
+    setFixedSize(1400, 900);
+
+    currentTheme = ThemeClassic;
+    gameState = StateMenu;
+    selectedMode = ModeClassic;
+    gameMode = ModeClassic;
 
     score = 0;
     level = 1;
@@ -43,10 +48,6 @@ MainWindow::MainWindow(QWidget *parent)
     hasHoldPiece = false;
     holdUsedThisTurn = false;
     usedSpecialThisGame = false;
-    currentTheme = ThemeClassic;
-    gameState = StateMenu;
-    selectedMode = ModeClassic;
-    gameMode = ModeClassic;
     achievementText.clear();
     endMessage.clear();
 
@@ -57,6 +58,12 @@ MainWindow::MainWindow(QWidget *parent)
     achSpecial = false;
     achTimedHalf = false;
 
+    // 这里的路径要和你的 resources.qrc 对上
+    menuBg.load(":/images/images/menu_bg.png");
+    gameBgWarm.load(":/images/images/game_bg_warm.png");
+    gameBgCool.load(":/images/images/game_bg_cool.png");
+    introImg.load(":/images/images/intro.png");
+
     gameTimer = new QTimer(this);
     connect(gameTimer, &QTimer::timeout, this, &MainWindow::onGameTick);
     gameTimer->start(50);
@@ -66,6 +73,7 @@ MainWindow::MainWindow(QWidget *parent)
     continueButton = new QPushButton("继续游戏", this);
     holdButton = new QPushButton("Hold 暂存", this);
     restartButton = new QPushButton("重新开始", this);
+    quitButton = new QPushButton("退出游戏", this);
 
     classicModeButton = new QPushButton(this);
     timedModeButton = new QPushButton(this);
@@ -73,60 +81,48 @@ MainWindow::MainWindow(QWidget *parent)
     specialModeButton = new QPushButton(this);
     obstacleModeButton = new QPushButton(this);
 
-    startButton->setGeometry(1005, 165, 170, 36);
-    pauseButton->setGeometry(1005, 215, 170, 36);
-    continueButton->setGeometry(1005, 215, 170, 36);
-    holdButton->setGeometry(1005, 265, 170, 36);
-    restartButton->setGeometry(1005, 315, 170, 36);
+    const QString arcadeBtnStyle =
+        "QPushButton{background:#f0dfbb;border:2px solid #8b6b3f;border-radius:8px;padding:6px 10px;color:#3d2b16;font-weight:bold;}"
+        "QPushButton:hover{background:#fff3d9;}";
 
-    classicModeButton->setGeometry(1005, 420, 170, 34);
-    timedModeButton->setGeometry(1005, 460, 170, 34);
-    challengeModeButton->setGeometry(1005, 500, 170, 34);
-    specialModeButton->setGeometry(1005, 540, 170, 34);
-    obstacleModeButton->setGeometry(1005, 580, 170, 34);
+    startButton->setStyleSheet(arcadeBtnStyle);
+    pauseButton->setStyleSheet(arcadeBtnStyle);
+    continueButton->setStyleSheet(arcadeBtnStyle);
+    holdButton->setStyleSheet(arcadeBtnStyle);
+    restartButton->setStyleSheet(arcadeBtnStyle);
+    quitButton->setStyleSheet(arcadeBtnStyle);
+
+    classicModeButton->setStyleSheet(arcadeBtnStyle);
+    timedModeButton->setStyleSheet(arcadeBtnStyle);
+    challengeModeButton->setStyleSheet(arcadeBtnStyle);
+    specialModeButton->setStyleSheet(arcadeBtnStyle);
+    obstacleModeButton->setStyleSheet(arcadeBtnStyle);
+
+    startButton->setGeometry(1080, 165, 170, 36);
+    pauseButton->setGeometry(1080, 215, 170, 36);
+    continueButton->setGeometry(1080, 215, 170, 36);
+    holdButton->setGeometry(1080, 265, 170, 36);
+    restartButton->setGeometry(1080, 315, 170, 36);
+    quitButton->setGeometry(1080, 365, 170, 36);
+
+    classicModeButton->setGeometry(1080, 420, 170, 34);
+    timedModeButton->setGeometry(1080, 460, 170, 34);
+    challengeModeButton->setGeometry(1080, 500, 170, 34);
+    specialModeButton->setGeometry(1080, 540, 170, 34);
+    obstacleModeButton->setGeometry(1080, 580, 170, 34);
 
     connect(startButton, &QPushButton::clicked, this, [this]() { startGame(selectedMode); });
     connect(pauseButton, &QPushButton::clicked, this, [this]() { pauseGame(); });
     connect(continueButton, &QPushButton::clicked, this, [this]() { continueGame(); });
     connect(holdButton, &QPushButton::clicked, this, [this]() { holdCurrentPiece(); });
     connect(restartButton, &QPushButton::clicked, this, [this]() { restartCurrentMode(); });
+    connect(quitButton, &QPushButton::clicked, this, [this]() { close(); });
 
-    connect(classicModeButton, &QPushButton::clicked, this, [this]() {
-        selectMode(ModeClassic);
-    });
-    connect(timedModeButton, &QPushButton::clicked, this, [this]() {
-        selectMode(ModeTimed);
-    });
-    connect(challengeModeButton, &QPushButton::clicked, this, [this]() {
-        selectMode(ModeChallenge);
-    });
-    connect(specialModeButton, &QPushButton::clicked, this, [this]() {
-        selectMode(ModeSpecial);
-    });
-    connect(obstacleModeButton, &QPushButton::clicked, this, [this]() {
-        selectMode(ModeObstacle);
-    });
-
-    connect(timedModeButton, &QPushButton::clicked, this, [this]() {
-        selectedMode = ModeTimed;
-        refreshModeButtonTexts();
-        update();
-    });
-    connect(challengeModeButton, &QPushButton::clicked, this, [this]() {
-        selectedMode = ModeChallenge;
-        refreshModeButtonTexts();
-        update();
-    });
-    connect(specialModeButton, &QPushButton::clicked, this, [this]() {
-        selectedMode = ModeSpecial;
-        refreshModeButtonTexts();
-        update();
-    });
-    connect(obstacleModeButton, &QPushButton::clicked, this, [this]() {
-        selectedMode = ModeObstacle;
-        refreshModeButtonTexts();
-        update();
-    });
+    connect(classicModeButton, &QPushButton::clicked, this, [this]() { selectMode(ModeClassic); });
+    connect(timedModeButton, &QPushButton::clicked, this, [this]() { selectMode(ModeTimed); });
+    connect(challengeModeButton, &QPushButton::clicked, this, [this]() { selectMode(ModeChallenge); });
+    connect(specialModeButton, &QPushButton::clicked, this, [this]() { selectMode(ModeSpecial); });
+    connect(obstacleModeButton, &QPushButton::clicked, this, [this]() { selectMode(ModeObstacle); });
 
     refreshModeButtonTexts();
     updateButtonState();
@@ -136,6 +132,52 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::updateButtonState()
+{
+    const bool inMenu = (gameState == StateMenu);
+    const bool inPlay = (gameState == StatePlaying);
+    const bool inPause = (gameState == StatePaused);
+    const bool inOver = (gameState == StateGameOver);
+
+    if (inMenu) {
+        startButton->setVisible(false);
+        pauseButton->setVisible(false);
+        continueButton->setVisible(false);
+        holdButton->setVisible(false);
+        restartButton->setVisible(false);
+        quitButton->setVisible(false);
+
+        classicModeButton->setVisible(false);
+        timedModeButton->setVisible(false);
+        challengeModeButton->setVisible(false);
+        specialModeButton->setVisible(false);
+        obstacleModeButton->setVisible(false);
+        return;
+    }
+
+    startButton->setVisible(inOver);
+    pauseButton->setVisible(inPlay);
+    continueButton->setVisible(inPause);
+    holdButton->setVisible(inPlay);
+    restartButton->setVisible(inPlay || inPause || inOver);
+    quitButton->setVisible(false);
+
+    classicModeButton->setVisible(true);
+    timedModeButton->setVisible(true);
+    challengeModeButton->setVisible(true);
+    specialModeButton->setVisible(true);
+    obstacleModeButton->setVisible(true);
+}
+
+void MainWindow::refreshModeButtonTexts()
+{
+    classicModeButton->setText(selectedMode == ModeClassic ? "▶ 经典模式" : "经典模式");
+    timedModeButton->setText(selectedMode == ModeTimed ? "▶ 限时模式" : "限时模式");
+    challengeModeButton->setText(selectedMode == ModeChallenge ? "▶ 闯关模式" : "闯关模式");
+    specialModeButton->setText(selectedMode == ModeSpecial ? "▶ 特殊方块模式" : "特殊方块模式");
+    obstacleModeButton->setText(selectedMode == ModeObstacle ? "▶ 障碍赛模式" : "障碍赛模式");
 }
 
 void MainWindow::resetBoard()
@@ -182,7 +224,7 @@ void MainWindow::setupObstacleField()
 QString MainWindow::themeName() const
 {
     switch (currentTheme) {
-    case ThemeNeon: return "霓虹主题";
+    case ThemeCool: return "冷色主题";
     case ThemePixel: return "像素主题";
     default: return "经典主题";
     }
@@ -210,85 +252,17 @@ QString MainWindow::modeName(GameMode mode) const
     }
 }
 
-QString MainWindow::modeDescription(GameMode mode) const
-{
-    switch (mode) {
-    case ModeTimed:
-        return "180 秒倒计时，时间与速度双重压力。";
-    case ModeChallenge:
-        return "消满目标行数即可通关，速度会逐级提升。";
-    case ModeSpecial:
-        return "炸弹 / 彩虹 / 清除方块出现更频繁。";
-    case ModeObstacle:
-        return "底部带固定障碍，像拼图一样规划路线。";
-    default:
-        return "标准俄罗斯方块，适合练手与展示。";
-    }
-}
-
 QString MainWindow::currentModeName() const
 {
     return modeName(gameMode);
 }
 
-QString MainWindow::currentModeDescription() const
+QPixmap MainWindow::currentGameBackground() const
 {
-    return modeDescription(gameMode);
-}
-
-void MainWindow::refreshModeButtonTexts()
-{
-    classicModeButton->setText(selectedMode == ModeClassic ? "▶ 经典模式" : "经典模式");
-    timedModeButton->setText(selectedMode == ModeTimed ? "▶ 限时模式" : "限时模式");
-    challengeModeButton->setText(selectedMode == ModeChallenge ? "▶ 闯关模式" : "闯关模式");
-    specialModeButton->setText(selectedMode == ModeSpecial ? "▶ 特殊方块模式" : "特殊方块模式");
-    obstacleModeButton->setText(selectedMode == ModeObstacle ? "▶ 障碍赛模式" : "障碍赛模式");
-}
-
-void MainWindow::selectMode(GameMode mode)
-{
-    selectedMode = mode;
-    refreshModeButtonTexts();
-
-    // 如果正在游戏中或暂停中，直接切换并重开当前局
-    if (gameState == StatePlaying || gameState == StatePaused || gameState == StateGameOver) {
-        startGame(mode);
-    } else {
-        updateButtonState();
-        update();
+    if (currentTheme == ThemeCool) {
+        return gameBgCool;   // 冷色调底图
     }
-}
-
-void MainWindow::updateButtonState()
-{
-    const bool inMenu = (gameState == StateMenu);
-    const bool inPlay = (gameState == StatePlaying);
-    const bool inPause = (gameState == StatePaused);
-    const bool inOver = (gameState == StateGameOver);
-
-    startButton->setVisible(inMenu || inOver);
-    pauseButton->setVisible(inPlay);
-    continueButton->setVisible(inPause);
-    holdButton->setVisible(inPlay);
-    restartButton->setVisible(inPlay || inPause);
-
-    // 模式按钮始终可见，方便游戏中切换
-    classicModeButton->setVisible(true);
-    timedModeButton->setVisible(true);
-    challengeModeButton->setVisible(true);
-    specialModeButton->setVisible(true);
-    obstacleModeButton->setVisible(true);
-
-    startButton->raise();
-    pauseButton->raise();
-    continueButton->raise();
-    holdButton->raise();
-    restartButton->raise();
-    classicModeButton->raise();
-    timedModeButton->raise();
-    challengeModeButton->raise();
-    specialModeButton->raise();
-    obstacleModeButton->raise();
+    return gameBgWarm;       // 经典/像素共用暖色调底图
 }
 
 int MainWindow::specialSpawnChance() const
@@ -353,7 +327,18 @@ void MainWindow::finishGame(const QString &message)
     gameState = StateGameOver;
     updateButtonState();
     update();
-    QApplication::beep();
+}
+
+void MainWindow::selectMode(GameMode mode)
+{
+    selectedMode = mode;
+    refreshModeButtonTexts();
+
+    if (gameState == StatePlaying || gameState == StatePaused || gameState == StateGameOver) {
+        startGame(mode);
+    } else {
+        update();
+    }
 }
 
 void MainWindow::startGame(GameMode mode)
@@ -379,12 +364,14 @@ void MainWindow::startGame(GameMode mode)
     hasHoldPiece = false;
     holdUsedThisTurn = false;
     usedSpecialThisGame = false;
+
     achFirstLine = false;
     achCombo3 = false;
     achHold = false;
     achLevel3 = false;
     achSpecial = false;
     achTimedHalf = false;
+
     gameState = StatePlaying;
 
     generateRandomPiece(nextPiece);
@@ -394,8 +381,6 @@ void MainWindow::startGame(GameMode mode)
     updateButtonState();
     setFocus();
     update();
-
-    QApplication::beep();
 }
 
 void MainWindow::pauseGame()
@@ -405,7 +390,6 @@ void MainWindow::pauseGame()
         updateButtonState();
         update();
     }
-    QApplication::beep();
 }
 
 void MainWindow::continueGame()
@@ -418,15 +402,19 @@ void MainWindow::continueGame()
     }
 }
 
+void MainWindow::restartCurrentMode()
+{
+    startGame(gameMode);
+}
+
 void MainWindow::generateRandomPiece(Cell piece[4][4])
 {
     int shapeIndex = QRandomGenerator::global()->bounded(7);
     int colorIndex = QRandomGenerator::global()->bounded(7);
-    int specialChance = specialSpawnChance();
     int specialType = SpecialNone;
 
     int roll = QRandomGenerator::global()->bounded(100);
-    if (roll < specialChance) {
+    if (roll < specialSpawnChance()) {
         int kindRoll = QRandomGenerator::global()->bounded(3);
         if (kindRoll == 0) specialType = SpecialBomb;
         else if (kindRoll == 1) specialType = SpecialRainbow;
@@ -511,8 +499,6 @@ void MainWindow::mergePiece()
 
 void MainWindow::applySpecialOnLock()
 {
-    bool bombTriggered = false;
-    bool clearColumnTriggered = false;
     bool anySpecialUsed = false;
 
     for (int i = 0; i < 4; ++i) {
@@ -524,7 +510,6 @@ void MainWindow::applySpecialOnLock()
 
             if (currentPiece[i][j].special == SpecialBomb) {
                 anySpecialUsed = true;
-                bombTriggered = true;
                 for (int r = by - 1; r <= by + 1; ++r) {
                     for (int c = bx - 1; c <= bx + 1; ++c) {
                         if (r >= 0 && r < BOARD_HEIGHT && c >= 0 && c < BOARD_WIDTH) {
@@ -535,9 +520,10 @@ void MainWindow::applySpecialOnLock()
             }
             else if (currentPiece[i][j].special == SpecialClearColumn) {
                 anySpecialUsed = true;
-                clearColumnTriggered = true;
-                for (int r = 0; r < BOARD_HEIGHT; ++r) {
-                    board[r][bx] = Cell{};
+                if (bx >= 0 && bx < BOARD_WIDTH) {
+                    for (int r = 0; r < BOARD_HEIGHT; ++r) {
+                        board[r][bx] = Cell{};
+                    }
                 }
             }
         }
@@ -548,115 +534,7 @@ void MainWindow::applySpecialOnLock()
         showAchievement("成就解锁：首次使用特殊方块！");
     }
 
-    if (bombTriggered) {
-        score += 40;
-    }
-    if (clearColumnTriggered) {
-        score += 60;
-    }
-
     usedSpecialThisGame = usedSpecialThisGame || anySpecialUsed;
-}
-
-void MainWindow::lockCurrentPiece()
-{
-    mergePiece();
-    applySpecialOnLock();
-
-    int cleared = clearLines();
-
-    if (cleared > 0) {
-        comboStreak++;
-        totalLinesCleared += cleared;
-
-        score += scoreForLines(cleared);
-        score += qMax(0, comboStreak - 1) * 80;
-
-        if (!achFirstLine) {
-            achFirstLine = true;
-            showAchievement("成就解锁：首次消行！");
-        }
-        if (comboStreak >= 3 && !achCombo3) {
-            achCombo3 = true;
-            showAchievement("成就解锁：连续消行 3 次！");
-        }
-        if (totalLinesCleared >= 10 && level >= 2 && !achLevel3) {
-            achLevel3 = true;
-            showAchievement("成就解锁：达到高等级！");
-        }
-
-        if (gameMode == ModeTimed) {
-            timeLeftSec += cleared;
-        }
-
-        QApplication::beep();
-    } else {
-        comboStreak = 0;
-    }
-
-    level = 1 + totalLinesCleared / 10;
-
-    if (gameMode == ModeTimed && timeLeftSec <= 0) {
-        finishGame("时间到！");
-        return;
-    }
-
-    if ((gameMode == ModeChallenge || gameMode == ModeObstacle) &&
-        challengeTargetLines() > 0 &&
-        totalLinesCleared >= challengeTargetLines()) {
-        finishGame("挑战成功！");
-        return;
-    }
-
-    spawnNextPiece();
-    update();
-
-    if (gameState == StateGameOver) {
-        return;
-    }
-}
-
-bool MainWindow::movePieceDown(bool softDrop)
-{
-    if (gameState != StatePlaying) {
-        return false;
-    }
-
-    if (!checkCollision(currentX, currentY + 1, currentPiece)) {
-        currentY++;
-        if (softDrop) {
-            score += 1;
-        }
-        return true;
-    }
-
-    lockCurrentPiece();
-    return false;
-}
-
-void MainWindow::rotatePiece()
-{
-    Cell temp[4][4];
-
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            temp[i][j] = Cell{};
-        }
-    }
-
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            temp[j][3 - i] = currentPiece[i][j];
-        }
-    }
-
-    if (!checkCollision(currentX, currentY, temp)) {
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                currentPiece[i][j] = temp[i][j];
-            }
-        }
-    }
 }
 
 int MainWindow::clearLines()
@@ -683,7 +561,8 @@ int MainWindow::clearLines()
         bool canClear = false;
         if (!hasObstacle && filledCount == BOARD_WIDTH) {
             canClear = true;
-        } else if (!hasObstacle && filledCount == BOARD_WIDTH - 1 && rainbowCount > 0) {
+        }
+        else if (!hasObstacle && filledCount == BOARD_WIDTH - 1 && rainbowCount > 0) {
             canClear = true;
         }
 
@@ -705,6 +584,96 @@ int MainWindow::clearLines()
     }
 
     return cleared;
+}
+
+void MainWindow::lockCurrentPiece()
+{
+    mergePiece();
+    applySpecialOnLock();
+
+    int cleared = clearLines();
+
+    if (cleared > 0) {
+        comboStreak++;
+        totalLinesCleared += cleared;
+
+        score += scoreForLines(cleared);
+        score += qMax(0, comboStreak - 1) * 80;
+
+        if (!achFirstLine) {
+            achFirstLine = true;
+            showAchievement("成就解锁：首次消行！");
+        }
+        if (comboStreak >= 3 && !achCombo3) {
+            achCombo3 = true;
+            showAchievement("成就解锁：连续消行 3 次！");
+        }
+        if (level >= 3 && !achLevel3) {
+            achLevel3 = true;
+            showAchievement("成就解锁：进入高等级！");
+        }
+
+        if (gameMode == ModeTimed) {
+            timeLeftSec += 1;
+        }
+    }
+    else {
+        comboStreak = 0;
+    }
+
+    level = 1 + totalLinesCleared / 10;
+
+    if (gameMode == ModeTimed && timeLeftSec <= 0) {
+        finishGame("时间到！");
+        return;
+    }
+
+    if ((gameMode == ModeChallenge || gameMode == ModeObstacle) &&
+        challengeTargetLines() > 0 &&
+        totalLinesCleared >= challengeTargetLines()) {
+        finishGame("挑战成功！");
+        return;
+    }
+
+    spawnNextPiece();
+    update();
+}
+
+bool MainWindow::movePieceDown(bool softDrop)
+{
+    if (gameState != StatePlaying) {
+        return false;
+    }
+
+    if (!checkCollision(currentX, currentY + 1, currentPiece)) {
+        currentY++;
+        if (softDrop) {
+            score += 1;
+        }
+        return true;
+    }
+
+    lockCurrentPiece();
+    return false;
+}
+
+void MainWindow::rotatePiece()
+{
+    Cell temp[4][4] = {};
+
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            temp[j][3 - i] = currentPiece[i][j];
+        }
+    }
+
+    if (!checkCollision(currentX, currentY, temp)) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                currentPiece[i][j] = temp[i][j];
+            }
+        }
+    }
 }
 
 void MainWindow::holdCurrentPiece()
@@ -735,7 +704,8 @@ void MainWindow::holdCurrentPiece()
         currentX = BOARD_WIDTH / 2 - 2;
         currentY = 0;
         hasHoldPiece = true;
-    } else {
+    }
+    else {
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 currentPiece[i][j] = holdPiece[i][j];
@@ -767,13 +737,6 @@ void MainWindow::holdCurrentPiece()
     update();
 }
 
-void MainWindow::restartCurrentMode()
-{
-    startGame(gameMode);
-}
-
-
-
 QColor MainWindow::getThemeBlockColor(int colorIndex) const
 {
     static const QColor classicColors[7] = {
@@ -786,7 +749,7 @@ QColor MainWindow::getThemeBlockColor(int colorIndex) const
         QColor(255, 210, 90)
     };
 
-    static const QColor neonColors[7] = {
+    static const QColor coolColors[7] = {
         QColor(255, 70, 70),
         QColor(0, 255, 255),
         QColor(255, 230, 0),
@@ -797,19 +760,19 @@ QColor MainWindow::getThemeBlockColor(int colorIndex) const
     };
 
     static const QColor pixelColors[7] = {
-        QColor(220, 80, 80),
-        QColor(70, 160, 220),
-        QColor(220, 180, 70),
-        QColor(140, 100, 220),
-        QColor(80, 180, 120),
-        QColor(220, 100, 180),
-        QColor(220, 160, 60)
+        QColor(214, 136, 46),
+        QColor(97, 144, 196),
+        QColor(165, 92, 200),
+        QColor(194, 85, 85),
+        QColor(87, 170, 102),
+        QColor(214, 120, 170),
+        QColor(74, 104, 188)
     };
 
     int idx = qBound(0, colorIndex, 6);
 
-    if (currentTheme == ThemeNeon) {
-        return neonColors[idx];
+    if (currentTheme == ThemeCool) {
+        return coolColors[idx];
     }
     if (currentTheme == ThemePixel) {
         return pixelColors[idx];
@@ -831,31 +794,31 @@ QColor MainWindow::getRainbowColor(int step) const
     return rainbow[step % 7];
 }
 
-QColor MainWindow::getBackgroundColor() const
-{
-    if (currentTheme == ThemeNeon) {
-        return QColor(8, 8, 12);
-    }
-    if (currentTheme == ThemePixel) {
-        return QColor(236, 227, 208);   // 复古米黄色，更像老游戏
-    }
-    return QColor(245, 247, 250);       // 经典主题保持干净柔和
-}
-
 QColor MainWindow::getGridColor() const
 {
-    if (currentTheme == ThemeNeon) {
+    if (currentTheme == ThemeCool) {
         return QColor(80, 200, 255, 110);
     }
     if (currentTheme == ThemePixel) {
-        return QColor(120, 100, 70, 115); // 像素风更暖、更粗
+        return QColor(120, 100, 70, 115);
     }
     return QColor(80, 80, 80, 55);
 }
 
+QColor MainWindow::getBackgroundColor() const
+{
+    if (currentTheme == ThemeCool) {
+        return QColor(8, 8, 12);
+    }
+    if (currentTheme == ThemePixel) {
+        return QColor(236, 227, 208);
+    }
+    return QColor(245, 247, 250);
+}
+
 QColor MainWindow::getTextColor() const
 {
-    if (currentTheme == ThemeNeon) {
+    if (currentTheme == ThemeCool) {
         return QColor(220, 250, 255);
     }
     if (currentTheme == ThemePixel) {
@@ -882,21 +845,13 @@ void MainWindow::drawBlock(QPainter &p, int x, int y, const Cell &cell)
         baseColor = getThemeBlockColor(cell.color);
     }
 
-    if (currentTheme == ThemeClassic) {
-        QLinearGradient grad(rect.topLeft(), rect.bottomRight());
-        grad.setColorAt(0.0, baseColor.lighter(145));
-        grad.setColorAt(1.0, baseColor.darker(150));
-        p.setPen(QPen(baseColor.darker(220), 1));
-        p.setBrush(grad);
-        p.drawRect(rect.adjusted(0, 0, -1, -1));
-    }
-    else if (currentTheme == ThemeNeon) {
+    if (currentTheme == ThemeCool) {
         QColor glow = baseColor;
-        glow.setAlpha(70);
+        glow.setAlpha(65);
 
         for (int i = 6; i >= 1; --i) {
             QColor g = glow;
-            g.setAlpha(12 * i);
+            g.setAlpha(10 * i);
             p.setPen(Qt::NoPen);
             p.setBrush(g);
             p.drawRect(rect.adjusted(-i, -i, i, i));
@@ -904,18 +859,19 @@ void MainWindow::drawBlock(QPainter &p, int x, int y, const Cell &cell)
 
         QLinearGradient grad(rect.topLeft(), rect.bottomRight());
         grad.setColorAt(0.0, baseColor.lighter(150));
-        grad.setColorAt(1.0, baseColor.darker(120));
-        p.setPen(QPen(baseColor.lighter(180), 1));
+        grad.setColorAt(1.0, baseColor.darker(115));
+        p.setPen(QPen(baseColor.lighter(170), 1));
         p.setBrush(grad);
         p.drawRect(rect.adjusted(0, 0, -1, -1));
     }
     else {
-        // 像素主题：硬边、无渐变、复古方块感更强
-        p.setPen(QPen(baseColor.darker(220), 2));
-        p.setBrush(baseColor);
+        QLinearGradient grad(rect.topLeft(), rect.bottomRight());
+        grad.setColorAt(0.0, baseColor.lighter(145));
+        grad.setColorAt(1.0, baseColor.darker(150));
+        p.setPen(QPen(baseColor.darker(220), 1));
+        p.setBrush(grad);
         p.drawRect(rect.adjusted(0, 0, -1, -1));
 
-        // 做一个简单的“像素高光”，让它和经典主题差异更大
         QRect topBand(rect.left() + 2, rect.top() + 2, rect.width() - 4, 5);
         QRect leftBand(rect.left() + 2, rect.top() + 2, 5, rect.height() - 4);
         p.setPen(Qt::NoPen);
@@ -929,7 +885,7 @@ void MainWindow::drawBlock(QPainter &p, int x, int y, const Cell &cell)
     }
 
     if (cell.special != SpecialNone) {
-        if (currentTheme == ThemeNeon) {
+        if (currentTheme == ThemeCool) {
             p.setPen(QPen(QColor(255, 255, 255), 3));
         } else {
             p.setPen(QPen(QColor(30, 30, 30), 2));
@@ -1052,36 +1008,127 @@ void MainWindow::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, currentTheme != ThemePixel);
 
-    if (currentTheme == ThemeNeon) {
-        QLinearGradient bg(0, 0, width(), height());
-        bg.setColorAt(0.0, QColor(10, 10, 14));
-        bg.setColorAt(1.0, QColor(0, 0, 0));
-        p.fillRect(rect(), bg);
-    } else if (currentTheme == ThemePixel) {
-        p.fillRect(rect(), getBackgroundColor());
-    } else {
-        QLinearGradient bg(0, 0, width(), height());
-        bg.setColorAt(0.0, QColor(255, 255, 255));
-        bg.setColorAt(1.0, QColor(230, 236, 245));
-        p.fillRect(rect(), bg);
+    if (gameState == StateMenu) {
+        if (!menuBg.isNull()) {
+            p.drawPixmap(rect(), menuBg);
+        } else {
+            QLinearGradient bg(0, 0, width(), height());
+            bg.setColorAt(0.0, QColor(240, 232, 214));
+            bg.setColorAt(1.0, QColor(225, 214, 190));
+            p.fillRect(rect(), bg);
+        }
+
+        p.fillRect(rect(), QColor(255, 250, 240, 30));
+
+        QFont titleFont("Microsoft YaHei", 42, QFont::Bold);
+        p.setFont(titleFont);
+        QLinearGradient titleGrad(0, 0, 420, 0);
+        titleGrad.setColorAt(0, QColor(255, 180, 0));
+        titleGrad.setColorAt(0.5, QColor(255, 0, 255));
+        titleGrad.setColorAt(1, QColor(0, 255, 255));
+        p.setPen(QPen(titleGrad, 2));
+        p.drawText(70, 120, "俄罗斯方块");
+
+        QRect menuRect(510, 180, 260, 430);
+        p.setBrush(QColor(0, 0, 0, 180));
+        p.setPen(QPen(QColor(0, 255, 255), 3));
+        p.drawRoundedRect(menuRect, 16, 16);
+
+        QStringList modes = {
+            "经典模式",
+            "限时模式",
+            "闯关模式",
+            "特殊方块模式",
+            "障碍赛模式"
+        };
+
+        QFont menuFont("Microsoft YaHei", 18, QFont::Bold);
+        p.setFont(menuFont);
+
+        for (int i = 0; i < modes.size(); ++i) {
+            QRect r(535, 225 + i * 58, 210, 40);
+            GameMode mode = static_cast<GameMode>(i);
+            if (mode == selectedMode) {
+                p.setPen(Qt::yellow);
+                p.drawText(r, Qt::AlignLeft | Qt::AlignVCenter, "▶ " + modes[i]);
+            } else {
+                p.setPen(Qt::white);
+                p.drawText(r, Qt::AlignLeft | Qt::AlignVCenter, modes[i]);
+            }
+        }
+
+        QRect introRect(890, 120, 370, 520);
+        p.setBrush(QColor(0, 0, 0, 180));
+        p.setPen(QPen(QColor(0, 255, 255), 3));
+        p.drawRoundedRect(introRect, 16, 16);
+
+        p.setPen(Qt::white);
+        QFont introTitle("Microsoft YaHei", 15, QFont::Bold);
+        p.setFont(introTitle);
+        p.drawText(960, 170, "—— 游戏说明 ——");
+
+        QFont introText("Microsoft YaHei", 12);
+        p.setFont(introText);
+        QString intro =
+            "移动、旋转、摆放不同形状的方块，\n"
+            "在底部完整填满一行即可消除得分！\n\n"
+            "支持 Hold 暂存 / 下一方块预览\n"
+            "多种模式 / 成就系统 / 障碍挑战";
+        p.drawText(QRect(920, 220, 300, 120), Qt::TextWordWrap, intro);
+
+        if (!introImg.isNull()) {
+            p.drawPixmap(QRect(940, 345, 230, 180), introImg);
+        } else {
+            p.setPen(QColor(255, 230, 150));
+            p.drawText(QRect(930, 350, 280, 160), Qt::AlignCenter, "intro.png");
+        }
+
+        p.setPen(Qt::white);
+        QFont bottomFont("Consolas", 16, QFont::Bold);
+        p.setFont(bottomFont);
+        p.drawText(390, 760, "↑↓ 选择模式   Enter 开始   1经典 2冷色 3像素");
+
+        updateButtonState();
+        return;
     }
 
-    const int boardLeft = 45;
-    const int boardTop = 60;
+    // 游戏底图：冷色主题专用，经典/像素用暖色
+    const QPixmap bg = currentGameBackground();
+    if (!bg.isNull()) {
+        p.drawPixmap(rect(), bg);
+    } else {
+        if (currentTheme == ThemeCool) {
+            QLinearGradient g(0, 0, width(), height());
+            g.setColorAt(0.0, QColor(10, 10, 14));
+            g.setColorAt(1.0, QColor(0, 0, 0));
+            p.fillRect(rect(), g);
+        } else {
+            QLinearGradient g(0, 0, width(), height());
+            g.setColorAt(0.0, QColor(248, 240, 220));
+            g.setColorAt(1.0, QColor(232, 220, 196));
+            p.fillRect(rect(), g);
+        }
+    }
+
+    if (currentTheme == ThemeCool) {
+        p.fillRect(rect(), QColor(0, 0, 0, 55));
+    } else {
+        p.fillRect(rect(), QColor(255, 245, 225, 25));
+    }
+
+    const int boardLeft = 60;
+    const int boardTop = 70;
     const int boardWidthPx = BOARD_WIDTH * BLOCK_SIZE;
     const int boardHeightPx = BOARD_HEIGHT * BLOCK_SIZE;
 
-    if (currentTheme == ThemeNeon) {
-        p.setPen(QPen(QColor(0, 255, 255, 170), 2));
-        p.setBrush(QColor(0, 0, 0, 70));
-        p.drawRect(boardLeft - 1, boardTop - 1, boardWidthPx + 1, boardHeightPx + 1);
-    } else {
-        p.setPen(QPen(QColor(90, 90, 90, 150), 1));
-        p.setBrush(QColor(255, 255, 255, 80));
-        p.drawRect(boardLeft - 1, boardTop - 1, boardWidthPx + 1, boardHeightPx + 1);
-    }
-
     p.setPen(QPen(getGridColor(), 1));
+    if (currentTheme == ThemeCool) {
+        p.setBrush(QColor(0, 0, 0, 70));
+    } else {
+        p.setBrush(QColor(255, 255, 255, 70));
+    }
+    p.drawRect(boardLeft - 1, boardTop - 1, boardWidthPx + 1, boardHeightPx + 1);
+
     for (int col = 0; col <= BOARD_WIDTH; ++col) {
         int x = boardLeft + col * BLOCK_SIZE;
         p.drawLine(x, boardTop, x, boardTop + boardHeightPx);
@@ -1124,79 +1171,80 @@ void MainWindow::paintEvent(QPaintEvent *)
         }
     }
 
-    int infoX = 385;
+    int infoX = 460;
     p.setPen(getTextColor());
 
     QFont titleFont = p.font();
     titleFont.setPointSize(16);
     titleFont.setBold(true);
     p.setFont(titleFont);
-    p.drawText(infoX, 85, "俄罗斯方块");
+    p.drawText(infoX, 95, "俄罗斯方块");
 
     QFont normalFont = p.font();
     normalFont.setPointSize(10);
     normalFont.setBold(false);
     p.setFont(normalFont);
 
-    p.drawText(infoX, 130, "得分: " + QString::number(score));
-    p.drawText(infoX, 160, "等级: " + QString::number(level));
-    p.drawText(infoX, 190, "累计消行: " + QString::number(totalLinesCleared));
-    p.drawText(infoX, 220, "当前主题: " + themeName());
-    p.drawText(infoX, 250, "当前状态: " + stateName());
-    p.drawText(infoX, 280, "当前模式: " + currentModeName());
+    p.drawText(infoX, 140, "得分: " + QString::number(score));
+    p.drawText(infoX, 170, "等级: " + QString::number(level));
+    p.drawText(infoX, 200, "累计消行: " + QString::number(totalLinesCleared));
+    p.drawText(infoX, 230, "当前主题: " + themeName());
+    p.drawText(infoX, 260, "当前状态: " + stateName());
+    p.drawText(infoX, 290, "当前模式: " + currentModeName());
 
     if (gameMode == ModeTimed) {
-        p.drawText(infoX, 310, "剩余时间: " + QString::number(timeLeftSec) + " 秒");
+        p.drawText(infoX, 320, "剩余时间: " + QString::number(timeLeftSec) + " 秒");
     } else if (gameMode == ModeChallenge || gameMode == ModeObstacle) {
-        p.drawText(infoX, 310, "目标行数: " + QString::number(challengeTargetLines()));
+        p.drawText(infoX, 320, "目标行数: " + QString::number(challengeTargetLines()));
     } else {
-        p.drawText(infoX, 310, "目标: 尽量拿高分");
+        p.drawText(infoX, 320, "目标: 尽量拿高分");
     }
 
-    p.drawText(infoX, 340, "连消: " + QString::number(comboStreak));
-    p.drawText(infoX, 370, "下落速度: " + QString::number(currentDropIntervalMs()) + " ms");
+    p.drawText(infoX, 350, "连消: " + QString::number(comboStreak));
+    p.drawText(infoX, 380, "下落速度: " + QString::number(currentDropIntervalMs()) + " ms");
 
     QFont sectionFont = p.font();
     sectionFont.setPointSize(10);
     sectionFont.setBold(true);
     p.setFont(sectionFont);
-    p.drawText(infoX, 410, "操作说明：");
+    p.drawText(infoX, 420, "操作说明：");
 
     QFont smallFont = p.font();
     smallFont.setPointSize(9);
     smallFont.setBold(false);
     p.setFont(smallFont);
 
-    QRect controlRect(infoX, 430, 250, 150);
+    QRect controlRect(infoX, 440, 280, 160);
     p.drawText(controlRect, Qt::TextWordWrap,
                "← → 移动方块\n"
                "↓ 加速下落\n"
-               "↑ / 空格 旋转\n"
+               "↑ / 空格 旋转方块\n"
                "H Hold 暂存\n"
                "P 暂停 / 继续\n"
                "R 重新开始\n"
                "1 经典主题\n"
-               "2 霓虹主题\n"
+               "2 冷色主题\n"
                "3 像素主题");
 
     p.setFont(sectionFont);
-    p.drawText(infoX, 595, "特殊方块说明：");
+    p.drawText(infoX, 610, "特殊方块说明：");
 
     p.setFont(smallFont);
-    QRect ruleRect(infoX, 615, 250, 165);
+    QRect ruleRect(infoX, 630, 300, 170);
     p.drawText(ruleRect, Qt::TextWordWrap,
-               "B 炸弹方块：落地后立刻清除周围 3x3。\n\n"
-               "R 彩虹方块：可当“补位工具”，帮助差 1 格的行消除。\n\n"
-               "C 清除方块：落地后直接清除当前整列。\n\n"
-               "X 障碍：固定障碍，不参与普通消行。");
+               "B 炸弹方块：落地后清除周围 3x3。\n\n"
+               "R 彩虹方块：可补齐差 1 格的行。\n\n"
+               "C 清除方块：落地后清除当前整列。\n\n"
+               "X 障碍：固定，不参与普通消行。");
 
-    drawMiniPiece(p, nextPiece, 760, 120, 22, "下一个方块");
+    drawMiniPiece(p, nextPiece, 930, 120, 22, "下一个方块");
+
     if (hasHoldPiece) {
-        drawMiniPiece(p, holdPiece, 760, 260, 22, "Hold 暂存");
+        drawMiniPiece(p, holdPiece, 930, 260, 22, "Hold 暂存");
     } else {
         p.setPen(getTextColor());
-        p.drawText(760, 252, "Hold 暂存");
-        QRect holdBox(760, 260, 88, 88);
+        p.drawText(930, 252, "Hold 暂存");
+        QRect holdBox(930, 260, 88, 88);
         p.setPen(QPen(getGridColor(), 1));
         p.setBrush(Qt::NoBrush);
         p.drawRect(holdBox);
@@ -1211,85 +1259,120 @@ void MainWindow::paintEvent(QPaintEvent *)
         drawOutlinedText(p, achRect, achievementText, 15, true);
     }
 
-    QRect overlayRect(boardLeft + 20, boardTop + 175, boardWidthPx - 40, 170);
+    QRect overlayRect(boardLeft + 22, boardTop + 175, boardWidthPx - 44, 170);
 
-    if (gameState == StateMenu) {
-        QRect overlayRect(boardLeft + 28, boardTop + 180, boardWidthPx - 56, 145);
-
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 145));
-        p.drawRoundedRect(overlayRect, 18, 18);
-
-        drawOutlinedText(p, overlayRect.adjusted(0, 14, 0, 0), "欢迎来到俄罗斯方块", 16, true);
-
-        p.setPen(Qt::white);
-        QFont menuFont = p.font();
-        menuFont.setPointSize(10);
-        p.setFont(menuFont);
-
-        p.drawText(overlayRect.adjusted(18, 58, -18, 0), Qt::AlignCenter | Qt::TextWordWrap,
-                   "点击右侧先选择模式，再点“开始游戏”进入。\n"
-                   "支持 Hold 暂存 / 下一个方块预览 / 成就提醒 / 障碍赛。");
-    }
-    else if (gameState == StatePaused) {
+    if (gameState == StatePaused) {
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 165));
         p.drawRoundedRect(overlayRect, 18, 18);
-
         drawOutlinedText(p, overlayRect.adjusted(0, 20, 0, 0), "游戏已暂停", 22, true);
         p.setPen(Qt::white);
-        p.drawText(overlayRect.adjusted(0, 74, 0, 0), Qt::AlignCenter, "点击“继续游戏”恢复");
-        p.drawText(overlayRect.adjusted(0, 112, 0, 0), Qt::AlignCenter, "按 P 也可以暂停 / 继续");
+        p.drawText(overlayRect.adjusted(0, 78, 0, 0), Qt::AlignCenter, "按 P 继续");
+        p.drawText(overlayRect.adjusted(0, 118, 0, 0), Qt::AlignCenter, "按 R 重新开始");
     }
     else if (gameState == StateGameOver) {
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 155));
+        p.setBrush(QColor(0, 0, 0, 165));
         p.drawRoundedRect(overlayRect, 18, 18);
-
-        drawOutlinedText(p, overlayRect.adjusted(0, 25, 0, 0), endMessage.isEmpty() ? "游戏结束" : endMessage, 18, true);
-        p.drawText(overlayRect.adjusted(0, 74, 0, 0), Qt::AlignCenter, "点击“开始游戏”重新开始");
-    }
-
-    if (gameState == StateMenu) {
-        p.setPen(getTextColor());
-        p.drawText(760, 418, "已选模式：");
-        p.drawText(760, 438, modeName(selectedMode));
-        QRect descRect(760, 460, 220, 90);
-        p.drawText(descRect, Qt::TextWordWrap, modeDescription(selectedMode));
+        drawOutlinedText(p, overlayRect.adjusted(0, 20, 0, 0), endMessage.isEmpty() ? "游戏结束" : endMessage, 22, true);
+        p.setPen(Qt::white);
+        p.drawText(overlayRect.adjusted(0, 78, 0, 0), Qt::AlignCenter, "按 Enter / R 重新开始");
+        p.drawText(overlayRect.adjusted(0, 118, 0, 0), Qt::AlignCenter, "按 Esc 返回菜单");
     }
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_1) {
+    const int key = event->key();
+
+    if (key == Qt::Key_1) {
         currentTheme = ThemeClassic;
         update();
         return;
     }
-    if (event->key() == Qt::Key_2) {
-        currentTheme = ThemeNeon;
+    if (key == Qt::Key_2) {
+        currentTheme = ThemeCool;
         update();
         return;
     }
-    if (event->key() == Qt::Key_3) {
+    if (key == Qt::Key_3) {
         currentTheme = ThemePixel;
         update();
         return;
     }
-    if (event->key() == Qt::Key_R) {
-        restartCurrentMode();
-        return;
-    }
-    if (event->key() == Qt::Key_P) {
-        if (gameState == StatePaused) {
-            continueGame();
-        } else if (gameState == StatePlaying) {
-            pauseGame();
+
+    if (gameState == StateMenu) {
+        if (key == Qt::Key_Up) {
+            selectedMode = static_cast<GameMode>((static_cast<int>(selectedMode) + 4) % 5);
+            refreshModeButtonTexts();
+            update();
+            return;
+        }
+        if (key == Qt::Key_Down) {
+            selectedMode = static_cast<GameMode>((static_cast<int>(selectedMode) + 1) % 5);
+            refreshModeButtonTexts();
+            update();
+            return;
+        }
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            startGame(selectedMode);
+            return;
+        }
+        if (key == Qt::Key_Escape) {
+            close();
+            return;
         }
         return;
     }
-    if (event->key() == Qt::Key_H) {
+
+    if (gameState == StatePaused) {
+        if (key == Qt::Key_P || key == Qt::Key_Return || key == Qt::Key_Enter) {
+            continueGame();
+            return;
+        }
+        if (key == Qt::Key_R) {
+            restartCurrentMode();
+            return;
+        }
+        if (key == Qt::Key_Escape) {
+            gameState = StateMenu;
+            updateButtonState();
+            update();
+            return;
+        }
+        return;
+    }
+
+    if (gameState == StateGameOver) {
+        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_R) {
+            restartCurrentMode();
+            return;
+        }
+        if (key == Qt::Key_Escape) {
+            gameState = StateMenu;
+            updateButtonState();
+            update();
+            return;
+        }
+        return;
+    }
+
+    if (key == Qt::Key_P) {
+        pauseGame();
+        return;
+    }
+    if (key == Qt::Key_R) {
+        restartCurrentMode();
+        return;
+    }
+    if (key == Qt::Key_H) {
         holdCurrentPiece();
+        return;
+    }
+    if (key == Qt::Key_Escape) {
+        gameState = StateMenu;
+        updateButtonState();
+        update();
         return;
     }
 
@@ -1297,24 +1380,24 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    if (event->key() == Qt::Key_Left) {
+    if (key == Qt::Key_Left) {
         if (!checkCollision(currentX - 1, currentY, currentPiece)) {
             currentX--;
             update();
         }
     }
-    else if (event->key() == Qt::Key_Right) {
+    else if (key == Qt::Key_Right) {
         if (!checkCollision(currentX + 1, currentY, currentPiece)) {
             currentX++;
             update();
         }
     }
-    else if (event->key() == Qt::Key_Down) {
+    else if (key == Qt::Key_Down) {
         if (movePieceDown(true)) {
             update();
         }
     }
-    else if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Space) {
+    else if (key == Qt::Key_Up || key == Qt::Key_Space) {
         rotatePiece();
         update();
     }
