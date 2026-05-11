@@ -58,7 +58,6 @@ MainWindow::MainWindow(QWidget *parent)
     achSpecial = false;
     achTimedHalf = false;
 
-    // 这里的路径要和你的 resources.qrc 对上
     menuBg.load(":/images/images/menu_bg.png");
     gameBgWarm.load(":/images/images/game_bg_warm.png");
     gameBgCool.load(":/images/images/game_bg_cool.png");
